@@ -1,14 +1,19 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { pgTable, serial, varchar } from 'drizzle-orm/pg-core';
-import { eq } from 'drizzle-orm';
-import postgres from 'postgres';
-import { genSaltSync, hashSync } from 'bcrypt-ts';
+import { drizzle } from "drizzle-orm/mysql2";
+import { mysqlTable, serial, varchar } from "drizzle-orm/mysql-core";
+import { eq } from "drizzle-orm";
+import mysql from "mysql2/promise";
+import { genSaltSync, hashSync } from "bcrypt-ts";
 
-// Optionally, if not using email/pass login, you can
-// use the Drizzle adapter for Auth.js / NextAuth
-// https://authjs.dev/reference/adapter/drizzle
-let client = postgres(`${process.env.POSTGRES_URL!}?sslmode=require`);
-let db = drizzle(client);
+let pool = mysql.createPool({
+  host: "localhost",
+  user: "root",
+  password: "qzh123",
+  database: "spiders",
+  waitForConnections: true,
+  connectionLimit: 10,
+});
+
+let db = drizzle(pool);
 
 export async function getUser(email: string) {
   const users = await ensureTableExists();
@@ -24,26 +29,30 @@ export async function createUser(email: string, password: string) {
 }
 
 async function ensureTableExists() {
-  const result = await client`
-    SELECT EXISTS (
-      SELECT FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      AND table_name = 'User'
-    );`;
+  const conn = await pool.getConnection();
+  try {
+    const [rows]: [mysql.RowDataPacket[], mysql.FieldPacket[]] =
+      await conn.query(
+        `SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'User';`
+      );
 
-  if (!result[0].exists) {
-    await client`
-      CREATE TABLE "User" (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(64),
-        password VARCHAR(64)
-      );`;
+    if (rows.length > 0 && rows[0].count === 0) {
+      await conn.query(`
+        CREATE TABLE User (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          email VARCHAR(64) NOT NULL,
+          password VARCHAR(64) NOT NULL
+        );
+      `);
+    }
+  } finally {
+    conn.release();
   }
 
-  const table = pgTable('User', {
-    id: serial('id').primaryKey(),
-    email: varchar('email', { length: 64 }),
-    password: varchar('password', { length: 64 }),
+  const table = mysqlTable("User", {
+    id: serial("id").primaryKey(),
+    email: varchar("email", { length: 64 }).notNull(),
+    password: varchar("password", { length: 64 }).notNull(),
   });
 
   return table;

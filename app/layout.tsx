@@ -1,6 +1,7 @@
 import './globals.css';
-
+import { redirect } from 'next/navigation';
 import { GeistSans } from 'geist/font/sans';
+import { useRouter } from 'next/navigation';
 
 let title = 'Next.js + Postgres Auth Starter';
 let description =
